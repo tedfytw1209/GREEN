@@ -29,10 +29,11 @@ class Inferer:
         model=None,
         tokenizer=None,
         model_name="",
-        output_dir=".",
+        output_dir="",
         num_examples=None,
         batch_size=10,
         max_length=2048,
+        verbose=True,
     ):
 
         self.dataset = Dataset.from_dict(
@@ -70,9 +71,11 @@ class Inferer:
         ]
 
         self.max_length = max_length
+        self.verbose = verbose
 
     def process_data(self):
-        print("Processing data...making prompts")
+        if self.verbose:
+            print("Processing data...making prompts")
 
         def promting(examples):
             return {
@@ -83,7 +86,8 @@ class Inferer:
             }
 
         self.dataset = self.dataset.map(promting, batched=True)
-        print("Done.")
+        if self.verbose:
+            print("Done.")
 
     @torch.inference_mode()
     def infer(self):
@@ -94,11 +98,12 @@ class Inferer:
                 rank=int(os.environ["RANK"]),
                 world_size=int(os.environ["WORLD_SIZE"]),
             )
-            print("Distributed dataset created on rank: ", int(os.environ["RANK"]))
+            if self.verbose:
+                print("Distributed dataset created on rank: ", int(os.environ["RANK"]))
         else:
             dataset_dist = self.dataset
-
-        print("==== Beginning Inference ====")
+        if self.verbose:
+            print("==== Beginning Inference ====")
         local_completions = []
         local_references = []
 
@@ -117,13 +122,14 @@ class Inferer:
         else:
             self.completions = local_completions
             self.prompts = local_references
-
-        print("==== End Inference ====")
+        if self.verbose:
+            print("==== End Inference ====")
 
         if len(self.completions) != len(self.prompts):
             print("length of prompts and completions are not equal!")
 
-        self.process_results()
+        green_result = self.process_results()
+        return green_result
 
     def tokenize_batch_as_chat(self, batch):
 
@@ -201,10 +207,11 @@ class Inferer:
                 **self.error_counts,  # unpacking the dictionary
             }
         )
-        path = self.output_dir + f"/results_{self.model_name}.csv"
-        os.makedirs(self.output_dir, exist_ok=True)
-        print("Saving generated response to prompt to ", path)
-        results_df.to_csv(path, index=False)
+        if self.output_dir:
+            path = self.output_dir + f"/results_{self.model_name}.csv"
+            os.makedirs(self.output_dir, exist_ok=True)
+            print("Saving generated response to prompt to ", path)
+            results_df.to_csv(path, index=False)
 
         self.compute_summary()
 
@@ -403,16 +410,35 @@ class Inferer:
         Returns:
             str: green summary.
         """
-        print("Computing summary ...")
+        if self.verbose:
+            print("Computing summary ...")
         representative_sentences = self.get_representative_sentences(self.completions)
         accuracies = self.compute_accuracy(self.completions)
 
         summary = f"[Summary]: Green average {np.mean(self.green_scores)} and standard variation {np.std(self.green_scores)} \n [Clinically Significant Errors Analyses]: <accuracy>. <representative error>\n\n (a) False report of a finding in the candidate: {accuracies[self.sub_categories[0]]}. \n {representative_sentences[self.sub_categories[0]]} \n\n (b) Missing a finding present in the reference: {accuracies[self.sub_categories[1]]}. \n {representative_sentences[self.sub_categories[1]]} \n\n (c) Misidentification of a finding's anatomic location/position: {accuracies[self.sub_categories[2]]}. \n {representative_sentences[self.sub_categories[2]]} \n\n (d) Misassessment of the severity of a finding: {accuracies[self.sub_categories[3]]}. \n {representative_sentences[self.sub_categories[3]]} \n\n (e) Mentioning a comparison that isn't in the reference: {accuracies[self.sub_categories[4]]}. \n {representative_sentences[self.sub_categories[4]]} \n\n (f) Omitting a comparison detailing a change from a prior study: {accuracies[self.sub_categories[5]]}. {representative_sentences[self.sub_categories[5]]}."
+        if self.verbose:
+            print(summary)
+            
 
-        print(summary)
 
+def compute(model_name, refs, hyps, output_dir="",batch_size=16,max_length=2048,verbose=True):
+    """_summary_
 
-def compute(model_name, refs, hyps, output_dir="."):
+    Args:
+        model_name (str): _description_
+        refs (list[str]): _description_
+        hyps (list[str]): _description_
+        output_dir (str, optional): _description_. Defaults to "".
+        batch_size (int, optional): _description_. Defaults to 16.
+        max_length (int, optional): _description_. Defaults to 2048.
+        verbose (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        result (pd.DataFrame): {
+                "reference", "predictions", "evaluation", "green",
+                **self.error_counts,  # unpacking the dictionary
+            }
+    """
     chat_template = "{% for message in messages %}\n{% if message['from'] == 'human' %}\n{{ '<|user|>\n' + message['value'] + eos_token }}\n{% elif message['from'] == 'system' %}\n{{ '<|system|>\n' + message['value'] + eos_token }}\n{% elif message['from'] == 'gpt' %}\n{{ '<|assistant|>\n'  + message['value'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
 
     if torch.cuda.is_available() and torch.cuda.device_count() > 1:
@@ -446,15 +472,20 @@ def compute(model_name, refs, hyps, output_dir="."):
         model=model,
         tokenizer=tokenizer,
         output_dir=output_dir,
-        batch_size=16,
+        batch_size=batch_size,
+        max_length=max_length,
+        verbose=verbose,
     )
 
     t = time.time()
 
-    inferer.infer()
+    result = inferer.infer()
 
     t = time.time() - t
-    print("Seconds per example: ", t / len(refs))
+    if verbose:
+        print("Seconds per example: ", t / len(refs))
+    
+    return result
 
 
 if __name__ == "__main__":
