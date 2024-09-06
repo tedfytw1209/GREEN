@@ -436,7 +436,7 @@ def compute(model_name, refs, hyps, output_dir="",batch_size=16,max_length=2048,
     Returns:
         result (pd.DataFrame): {
                 "reference", "predictions", "evaluation", "green",
-                **self.error_counts,  # unpacking the dictionary
+                **self.error_counts,
             }
     """
     chat_template = "{% for message in messages %}\n{% if message['from'] == 'human' %}\n{{ '<|user|>\n' + message['value'] + eos_token }}\n{% elif message['from'] == 'system' %}\n{{ '<|system|>\n' + message['value'] + eos_token }}\n{% elif message['from'] == 'gpt' %}\n{{ '<|assistant|>\n'  + message['value'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
