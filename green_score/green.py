@@ -426,8 +426,8 @@ def compute(model_name, refs, hyps, output_dir="",batch_size=16,max_length=2048,
 
     Args:
         model_name (str): _description_
-        refs (list[str]): _description_
-        hyps (list[str]): _description_
+        refs (list[str]): reference report (ground truth)
+        hyps (list[str]): hypothsis report (model prediction)
         output_dir (str, optional): _description_. Defaults to "".
         batch_size (int, optional): _description_. Defaults to 16.
         max_length (int, optional): _description_. Defaults to 2048.
