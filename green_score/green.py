@@ -35,7 +35,7 @@ class Inferer:
         max_length=2048,
         verbose=True,
     ):
-
+        self.verbose = verbose
         self.dataset = Dataset.from_dict(
             {"reference": dataset[0], "prediction": dataset[1]}
         )
@@ -71,7 +71,7 @@ class Inferer:
         ]
 
         self.max_length = max_length
-        self.verbose = verbose
+        
 
     def process_data(self):
         if self.verbose:
